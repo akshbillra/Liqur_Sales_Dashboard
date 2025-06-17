@@ -4,64 +4,51 @@ import plotly.express as px
 import time
 
 st.set_page_config(page_title="Live Sales Dashboard", layout="wide")
-
 st.title("📊 Live Product Sales Dashboard")
 
-# Add auto-refresh every 60 seconds
-countdown = st.empty()
-time.sleep(1)
-
-
-# Read Excel File
+# Load Excel
 def load_data():
-    return pd.read_excel("Personal Aksh_Free.xlsx",  header=3)
+    return pd.read_excel("Personal Aksh_Free.xlsx", header=3)
 
 df = load_data()
 df.columns = df.columns.str.strip().str.lower()
-# Show Raw Data
-with st.expander("📄 Show Raw Data"):
-    st.dataframe(df)
 
-st.subheader("📌 Total Sales by Cases")
+# Sidebar filters
+st.sidebar.header("🔍 Apply Filters (Optional)")
+clients = df['party name'].dropna().unique() if 'party name' in df.columns else []
+months = df['month'].dropna().unique() if 'month' in df.columns else []
 
-# Now use lowercase column names
-sales_by_product = df.groupby("brand name")["total cases"].sum().reset_index()
+selected_client = st.sidebar.selectbox("Client", ["All"] + sorted(list(clients)))
+selected_month = st.sidebar.selectbox("Month", ["All"] + sorted(list(months)))
 
-fig_product = px.bar(
-    sales_by_product,
-    x="brand name",
-    y="total cases",
-    color="brand name",  # no 'Product' column anymore
-    title="Total Quantity Sold by Brand"
-)
+# Apply filters
+filtered_df = df.copy()
+if selected_client != "All":
+    filtered_df = filtered_df[filtered_df['party name'] == selected_client]
+if selected_month != "All":
+    filtered_df = filtered_df[filtered_df['month'] == selected_month]
 
-st.plotly_chart(fig_product, use_container_width=True)
+# Use filtered_df only (either full or filtered)
+data_to_use = filtered_df
 
-# Grouping by 'bwh' if exists
-if "bwh" in df.columns and "total cases" in df.columns:
-    sales_by_location = df.groupby("bwh")["total cases"].sum().reset_index()
+# Show table
+with st.expander("📄 Show Data Used in Charts"):
+    st.dataframe(data_to_use)
 
-    import plotly.express as px
-    fig = px.bar(
-        sales_by_location,
-        x="bwh",
-        y="total cases",
-        color="bwh",
-        title="📍 Total Sales by Location (BWH)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("⚠️ 'bwh' or 'total cases' column missing!")
+# --- Chart: Brand Sales ---
+if "brand name" in data_to_use.columns and "total cases" in data_to_use.columns:
+    sales_by_brand = data_to_use.groupby("brand name")["total cases"].sum().reset_index()
+    fig_brand = px.bar(sales_by_brand, x="brand name", y="total cases", color="brand name", title="Total Sales by Brand")
+    st.plotly_chart(fig_brand, use_container_width=True)
 
-if 'date' in df.columns and 'total cases' in df.columns:
-    daily_sales = df.groupby('date')['total cases'].sum().reset_index()
+# --- Chart: Location Sales ---
+if "bwh" in data_to_use.columns and "total cases" in data_to_use.columns:
+    sales_by_bwh = data_to_use.groupby("bwh")["total cases"].sum().reset_index()
+    fig_bwh = px.bar(sales_by_bwh, x="bwh", y="total cases", color="bwh", title="Sales by Location (BWH)")
+    st.plotly_chart(fig_bwh, use_container_width=True)
 
-    import plotly.express as px
-    fig = px.line(daily_sales, x='date', y='total cases', title='Daily Sales Over Time')
-    st.plotly_chart(fig)
-else:
-    st.warning("Required columns 'date' or 'total cases' not found.")
-
-# Refresh Instruction
-st.info("🔄 To auto-refresh the dashboard, press **R** in your browser or refresh manually after Excel update.")
-
+# --- Chart: Daily Trend ---
+if "date" in data_to_use.columns and "total cases" in data_to_use.columns:
+    daily_sales = data_to_use.groupby("date")["total cases"].sum().reset_index()
+    fig_date = px.line(daily_sales, x="date", y="total cases", title="📅 Daily Sales Trend")
+    st.plotly_chart(fig_date, use_container_width=True)
